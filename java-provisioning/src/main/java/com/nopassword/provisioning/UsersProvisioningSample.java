@@ -20,12 +20,10 @@ public class UsersProvisioningSample {
      */
     public static void main(String[] args) throws Exception {
         PropertyConfigurator.configure(UsersProvisioningSample.class.getResource("/conf/log4j.properties").getPath());
-        String publicKey = UsersProvisioningSample.class.getResource("/conf/public_key.pem").getPath();
-        String privateKey = UsersProvisioningSample.class.getResource("/conf/private_key_pkcs8.pem").getPath();
+        String publicKey = UsersProvisioningSample.class.getResource("/conf/public-key.pem").getPath();
+        String privateKey = UsersProvisioningSample.class.getResource("/conf/private-key.pem").getPath();
         UsersProvisioning provisioning = new UsersProvisioning(publicKey, privateKey);
 
-        System.out.println("public key registration (run just once)");
-        System.out.println(provisioning.publicKeyRegistration());
         User user = new User("john.smith@example.com", "John", "Smith");
 
         //group sample
@@ -40,8 +38,8 @@ public class UsersProvisioningSample {
 
         //role sample
         Map<String, String> role = new HashMap<>();
-        role.put("Id", "Test Role x");
-        role.put("Name", "Test Role x");
+        role.put("Id", "Test Role");
+        role.put("Name", "Test Role");
 
         System.out.println("\nadd/edit user");
         if (provisioning.isUserExists(user.getEmail())) {
@@ -56,7 +54,10 @@ public class UsersProvisioningSample {
 
         System.out.println("\nadd group");
         String groupId = provisioning.addGroup(group);
-        System.out.println("group added: " + groupId);
+
+        if (groupId != null) {
+            System.out.println("group added: " + groupId);
+        }
 
         System.out.println("\nadd group member");
         if (provisioning.assignGroupMember(groupMember)) {
@@ -70,7 +71,10 @@ public class UsersProvisioningSample {
 
         System.out.println("\nadd role");
         String roleId = provisioning.postRole(role);
-        System.out.println("role added: " + roleId);
+
+        if (roleId != null) {
+            System.out.println("role added: " + roleId);
+        }
 
         System.out.println("\nadd items to role");
         Map<String, Object> roleItems = new HashMap<>();
@@ -86,7 +90,9 @@ public class UsersProvisioningSample {
         Map<String, Integer> size = new HashMap<>();
         size.put("Size", 100);
         size.put("Offset", 0);
-        System.out.println(provisioning.getRoles(size));
+        Map<String, Object> result = provisioning.getRoles(size);
+        System.out.println("Total: " + result.get("Total"));
+        System.out.println(result.get("Items"));
 
         System.out.println("\nget role items");
         Map<String, List<String>> items = provisioning.getAssignedToRole(roleId);

@@ -12,6 +12,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class ProvisioningResponse {
 
     public static final String SUCCEEDED = "Succeeded";
+    public static final String MESSAGE = "Message";
 
     @JsonProperty("Message")
     private String message;

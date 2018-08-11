@@ -1,24 +1,21 @@
 package com.nopassword.provisioning;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nopassword.common.crypto.NPCipher;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.nopassword.common.crypto.RSACipher;
 import com.nopassword.common.crypto.RSAKeyLoader;
-import com.nopassword.provisioning.model.ProvisioningRequest;
+import com.nopassword.common.model.GenericRequest;
+import com.nopassword.common.model.GenericResponse;
+import com.nopassword.common.utils.GenericResponseHandler;
+import com.nopassword.common.utils.RestClient;
 import com.nopassword.provisioning.model.ProvisioningResponse;
 import com.nopassword.provisioning.model.User;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.log4j.Logger;
-import org.springframework.web.client.RestTemplate;
 
 /**
  * Consumes NoPassword provisioning API services
@@ -47,8 +44,7 @@ public class UsersProvisioning {
     private static String ASSIGN_TO_ROLE_URL;
     private static String GET_ASSIGNED_TO_ROLE_URL;
 
-    private final NPCipher rsaCipher;
-    private final String trimmedPublicKey;
+    private final RSACipher rsaCipher;
     private final String genericAPIKey;
 
     /**
@@ -61,11 +57,7 @@ public class UsersProvisioning {
     public UsersProvisioning(String publicKeyFile, String privateKeyFile) throws Exception {
         PublicKey publicKey = RSAKeyLoader.loadPublicKey(publicKeyFile);
         PrivateKey privateKey = RSAKeyLoader.loadPrivateKey(privateKeyFile);
-        this.rsaCipher = new NPCipher(publicKey, privateKey, StandardCharsets.UTF_16LE);
-        this.trimmedPublicKey = new String(Files.readAllBytes(Paths.get(publicKeyFile)))
-                .replaceAll("\n", "")
-                .replaceAll("-----BEGIN PUBLIC KEY-----", "")
-                .replaceAll("-----END PUBLIC KEY-----", "");
+        this.rsaCipher = new RSACipher(publicKey, privateKey, StandardCharsets.UTF_16LE);
 
         Properties props = new Properties();
         props.load(UsersProvisioning.class.getResourceAsStream("/conf/config.properties"));
@@ -164,7 +156,7 @@ public class UsersProvisioning {
      * @return Group guid
      */
     public String addGroup(Map group) {
-        return (String) sendRequestAndParse(group, ADD_GROUP_URL).get("Value");
+        return (String) sendRequestAndParse(group, ADD_GROUP_URL, String.class);
     }
 
     /**
@@ -210,8 +202,7 @@ public class UsersProvisioning {
      * @return Role guid
      */
     public String postRole(Map role) {
-        Map<String, Object> response = sendRequestAndParse(role, POST_ROLE_URL);
-        return (String) response.get("Value");
+        return sendRequestAndParse(role, POST_ROLE_URL, String.class);
     }
 
     /**
@@ -233,7 +224,7 @@ public class UsersProvisioning {
      * "user2@test.com"], "Groups": ["Group 1", "Group 1"] }
      */
     public Map getAssignedToRole(String roleGUID) {
-        return (Map) sendRequestAndParse(roleGUID, GET_ASSIGNED_TO_ROLE_URL).get("Value");
+        return (Map) sendRequestAndParse(roleGUID, GET_ASSIGNED_TO_ROLE_URL);
     }
 
     /**
@@ -258,117 +249,40 @@ public class UsersProvisioning {
      * 2",Order:2} ] }
      */
     public Map getRoles(Map size) {
-        return (Map) sendRequestAndParse(size, GET_ROLES_URL).get("Value");
+        return (Map) sendRequestAndParse(size, GET_ROLES_URL);
+    }
+    
+    /**
+     * 
+     * @param payload Data
+     * @param url Request URL
+     * @return A map containing result values
+     */
+    public Map<String, Object> sendRequestAndParse(Object payload, String url) {
+        return sendRequestAndParse(payload, url, Map.class);
     }
 
     /**
      * Sends a REST post request to NoPassword API, parses null response
      *
+     * @param <T> 
      * @param payload Data
      * @param url Request URL
-     * @return Map
+     * @param clazz Specifies return type
+     * @return Object instance of type T
      */
-    public Map<String, Object> sendRequestAndParse(Object payload, String url) {
-        Map<String, Object> response = null;
+    public <T> T sendRequestAndParse(Object payload, String url, Class<T> clazz) {
         try {
-            response = sendRequest(payload, url);
-        } catch (Exception ex) {
-            LOG.error("error procesing request", ex);
+            GenericRequest request = new GenericRequest(genericAPIKey, payload, rsaCipher);
+            RestClient client = new RestClient();
+            GenericResponse response = client.post(url, request, GenericResponse.class);
+            return GenericResponseHandler.parseGenericResponse(response, rsaCipher, clazz);
+        } catch (JsonProcessingException ex) {
+            LOG.error("Creating generic request", ex);
+        } catch (IOException ex) {
+            LOG.error("Error parsing generic response", ex);
         }
-
-        if (response == null) {
-            response = new HashMap();
-            response.put(ProvisioningResponse.SUCCEEDED, false);
-            return response;
-        }
-        return response;
-    }
-
-    /**
-     *
-     * @param payload Data
-     * @param url REST service url
-     * @return A map containing service response
-     * @throws Exception
-     */
-    public Map sendRequest(Object payload, String url) throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        String timestamp = currentTime();
-        String jsonPayload = mapper.writeValueAsString(payload);
-        jsonPayload = Base64.getEncoder().encodeToString(jsonPayload.getBytes());
-        String signature = rsaCipher.sign(timestamp + jsonPayload);
-        ProvisioningRequest request;
-        Map<String, Object> result = null;
-
-        request = new ProvisioningRequest(
-                jsonPayload, timestamp, signature, genericAPIKey);
-
-        RestTemplate client = new RestTemplate();
-        ProvisioningResponse response = client.postForObject(url, request, ProvisioningResponse.class);
-
-        if (response == null) {
-            return null;
-        }
-
-        if (response.succeeded()) {
-            //retrieve and decrypt AES key and iv
-            String encKeyString = rsaCipher.decrypt(response.getValue().getEncKey());
-            Map<String, String> encKey = mapper.readValue(encKeyString, Map.class);
-            byte[] aesKey = Base64.getDecoder().decode(encKey.get("K"));
-            byte[] aesIV = Base64.getDecoder().decode(encKey.get("V"));
-
-            //decrypt payload with AES
-            String respPayload = (String) response.getValue().getPayload();
-            NPCipher aesCipher = new NPCipher(aesKey, aesIV, StandardCharsets.UTF_16LE);
-            result = mapper.readValue(aesCipher.decrypt(respPayload), Map.class);
-        } else {
-            LOG.error(response.getMessage());
-            return null;
-        }
-
-        if (!(boolean) result.get("Succeeded")) {
-            LOG.error(result.get("Message"));
-        }
-        return result;
-    }
-
-    /**
-     * Registers the public RSA key in NoPassword. The key is registered just
-     * once and can't be overwritten.
-     *
-     * @return True if the key was successfully published. False otherwise.
-     */
-    public boolean publicKeyRegistration() {
-        String timestamp = currentTime();
-        String signature = timestamp + trimmedPublicKey;
-        ProvisioningRequest request
-                = new ProvisioningRequest(trimmedPublicKey,
-                        timestamp, signature, genericAPIKey);
-        RestTemplate client = new RestTemplate();
-        ProvisioningResponse response;
-
-        try {
-            response = client.postForObject(PUBLIC_KEY_REGISTRATION_URL,
-                    request, ProvisioningResponse.class);
-        } catch (Exception ex) {
-            LOG.error("error registering key", ex);
-            return false;
-        }
-
-        if (!response.succeeded()) {
-            LOG.error(response.getMessage());
-        }
-
-        return response.succeeded();
-    }
-
-    /**
-     * Gets UTC
-     *
-     * @return UTC current time yyyy-mm-dd hh:mi:ssZ
-     */
-    public static String currentTime() {
-        return ZonedDateTime.now(ZoneOffset.UTC).toString().substring(0, 19).replace("T", " ") + "Z";
+        return null;
     }
 
 }
