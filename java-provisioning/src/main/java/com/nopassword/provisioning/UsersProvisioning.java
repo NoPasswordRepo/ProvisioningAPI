@@ -2,7 +2,7 @@ package com.nopassword.provisioning;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.nopassword.common.crypto.RSACipher;
-import com.nopassword.common.crypto.RSAKeyLoader;
+import com.nopassword.common.crypto.RSAUtils;
 import com.nopassword.common.model.GenericRequest;
 import com.nopassword.common.model.GenericResponse;
 import com.nopassword.common.utils.GenericResponseHandler;
@@ -55,8 +55,8 @@ public class UsersProvisioning {
      * @throws Exception
      */
     public UsersProvisioning(String publicKeyFile, String privateKeyFile) throws Exception {
-        PublicKey publicKey = RSAKeyLoader.loadPublicKey(publicKeyFile);
-        PrivateKey privateKey = RSAKeyLoader.loadPrivateKey(privateKeyFile);
+        PublicKey publicKey = RSAUtils.loadPublicKey(publicKeyFile);
+        PrivateKey privateKey = RSAUtils.loadPrivateKey(privateKeyFile);
         this.rsaCipher = new RSACipher(publicKey, privateKey, StandardCharsets.UTF_16LE);
 
         Properties props = new Properties();
