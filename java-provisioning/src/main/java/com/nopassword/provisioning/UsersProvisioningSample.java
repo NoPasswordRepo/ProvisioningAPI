@@ -4,6 +4,7 @@ import com.nopassword.provisioning.model.User;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import org.apache.log4j.PropertyConfigurator;
 
 /**
@@ -22,7 +23,10 @@ public class UsersProvisioningSample {
         PropertyConfigurator.configure(UsersProvisioningSample.class.getResource("/conf/log4j.properties").getPath());
         String publicKey = UsersProvisioningSample.class.getResource("/conf/public-key.pem").getPath();
         String privateKey = UsersProvisioningSample.class.getResource("/conf/private-key.pem").getPath();
-        UsersProvisioning provisioning = new UsersProvisioning(publicKey, privateKey);
+        Properties props = new Properties();
+        props.load(UsersProvisioning.class.getResourceAsStream("/conf/config.properties"));
+        UsersProvisioning provisioning = new UsersProvisioning(
+                publicKey, privateKey, props.getProperty("generic_api_key"), props.getProperty("provisioning_url"));
 
         User user = new User("john.smith@example.com", "John", "Smith");
 

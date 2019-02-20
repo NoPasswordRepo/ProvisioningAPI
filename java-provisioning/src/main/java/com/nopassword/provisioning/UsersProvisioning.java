@@ -48,22 +48,18 @@ public class UsersProvisioning {
     private final String genericAPIKey;
 
     /**
-     * Creates a UsersProvisioning object
      *
-     * @param publicKeyFile Path to RSA public key file
-     * @param privateKeyFile Path to RSA private key file in PKCS8 format
-     * @throws Exception
+     * @param rsaPublicKey
+     * @param rsaPrivateKey
+     * @param genericAPIKey
+     * @param baseURL
+     * @throws IOException
      */
-    public UsersProvisioning(String publicKeyFile, String privateKeyFile) throws Exception {
-        PublicKey publicKey = RSAUtils.loadPublicKey(publicKeyFile);
-        PrivateKey privateKey = RSAUtils.loadPrivateKey(privateKeyFile);
-        this.rsaCipher = new RSACipher(publicKey, privateKey, StandardCharsets.UTF_16LE);
+    public UsersProvisioning(PublicKey rsaPublicKey, PrivateKey rsaPrivateKey, String genericAPIKey, String baseURL) throws IOException {
+        this.genericAPIKey = genericAPIKey;
+        this.rsaCipher = new RSACipher(rsaPublicKey, rsaPrivateKey, StandardCharsets.UTF_16LE);
 
-        Properties props = new Properties();
-        props.load(UsersProvisioning.class.getResourceAsStream("/conf/config.properties"));
-        this.genericAPIKey = props.getProperty("generic_api_key");
-
-        BASE_URL = props.getProperty("provisioning_url");
+        BASE_URL = baseURL;
         ADD_USER_URL = BASE_URL + "AddUser";
         EDIT_USER_URL = BASE_URL + "EditUser";
         DELETE_USER_URL = BASE_URL + "DeleteUser";
@@ -80,6 +76,19 @@ public class UsersProvisioning {
         DELETE_ROLE_URL = BASE_URL + "DeleteRole";
         ASSIGN_TO_ROLE_URL = BASE_URL + "AssignToRole";
         GET_ASSIGNED_TO_ROLE_URL = BASE_URL + "GetAssignedToRole";
+    }
+
+    /**
+     * Creates a UsersProvisioning object
+     *
+     * @param publicKeyFile Path to RSA public key file
+     * @param privateKeyFile Path to RSA private key file in PKCS8 format
+     * @param genericAPIKeay
+     * @param baseURL
+     * @throws Exception
+     */
+    public UsersProvisioning(String publicKeyFile, String privateKeyFile, String genericAPIKeay, String baseURL) throws Exception {
+        this(RSAUtils.loadPublicKey(publicKeyFile), RSAUtils.loadPrivateKey(privateKeyFile), genericAPIKeay, baseURL);
     }
 
     /**
@@ -251,9 +260,9 @@ public class UsersProvisioning {
     public Map getRoles(Map size) {
         return (Map) sendRequestAndParse(size, GET_ROLES_URL);
     }
-    
+
     /**
-     * 
+     *
      * @param payload Data
      * @param url Request URL
      * @return A map containing result values
@@ -265,7 +274,7 @@ public class UsersProvisioning {
     /**
      * Sends a REST post request to NoPassword API, parses null response
      *
-     * @param <T> 
+     * @param <T>
      * @param payload Data
      * @param url Request URL
      * @param clazz Specifies return type
